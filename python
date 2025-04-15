@@ -1,0 +1,883 @@
+import pandas as pd
+import re
+import os
+import time
+import matplotlib.pyplot as plt
+from PIL import Image
+from io import BytesIO
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import Select
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager  # Import WebDriver Manager
+
+# AMEND THESE EACH WEEK
+# dg and radar values
+dist_dg=0.5
+acc_dg=0.6
+app_dg=0.7
+arg_dg=0.4
+putt_dg=0.4
+
+# Import radar table for more precise values
+############################################
+dist_rdr=0.7
+acc_rdr=0.56
+app_rdr=0.88
+arg_rdr=0.65
+putt_rdr=0.57
+sg_rdr=1.00
+
+# event count
+total_events = 39 # Keep constant #3/39 fedex playoff
+completed_events = 15
+corr_to_last_season = 0.5 #Keep constant #23-24 corr
+
+
+#Disable SSL certificate verification
+os.environ['WDM_SSL_VERIFY']='0'
+
+# Initialize WebDriver with WebDriver Manager (no need for local path)
+chrome_options = Options()
+chrome_options.add_argument('--headless')  # Optional, if you want headless mode
+chrome_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+
+# region
+
+#DISTANCE
+
+# Open the webpage
+
+driver.get('https://www.pgatour.com/stats/detail/101')
+
+# Find the div using the CSS selector
+
+css_selector = '#__next > div.css-1hs4aw1 > div > div.css-i5hv4r > main > div > div:nth-child(9)'
+div = driver.find_element(By.CSS_SELECTOR,css_selector)
+
+# Gather div_text
+
+div_text=div.text
+
+# Regular expression to remove 'Tour Average' and the following numeric value
+
+# This pattern captures 'Tour Average' and any numeric values that follow, including optional newlines
+
+pattern = re.compile(r'Tour Average\s+[\d.,]+\s*\n?')
+
+# Apply regex substitution to remove 'Tour Average' and the numeric value
+
+cleaned_text = pattern.sub('', div_text).strip()  # .strip() to remove any leading/trailing whitespace
+
+# Print the cleaned text
+
+print(cleaned_text.splitlines()[:10])
+
+# Define keywords to remove (can be adjusted based on needs)
+
+keywords_to_remove = [
+    'All Players', 'RANK', 'PLAYER', 'AVG', 
+    'TOTAL DISTANCE', 'TOTAL DRIVES'
+]
+
+# Function to remove specific keywords
+
+def clean_text(text, keywords):
+    lines = text.splitlines()
+    cleaned_lines = [line for line in lines if not any(keyword in line for keyword in keywords)]
+    return "\n".join(cleaned_lines)
+
+# Clean the text by removing lines containing specific keywords
+
+cleaned_text = clean_text(cleaned_text, keywords_to_remove)
+
+# Print the cleaned text
+
+print(cleaned_text.splitlines()[:10])
+
+# Define the updated headers (removing 'All Players')
+
+headers = ['Rank', 'Change', 'Player', 'Avg', 'Total Distance', 'Total Drives']
+
+# Function to handle multi-word entries correctly
+
+def extract_values_from_line(line):
+# Split line by a predefined number of spaces or other delimiter
+# Assuming space-separated values, we use regex to split on multiple spaces and handle quotes for multi-word entries
+    return re.split(r'\s{2,}', line.strip())  # Split on 2 or more spaces
+
+# Split the cleaned text into individual values
+
+values = [cleaned_text]
+for line in cleaned_text.splitlines():
+    values.extend(extract_values_from_line(line))
+
+# Create rows from values
+
+rows = [values[i:i + len(headers)] for i in range(1, len(values), len(headers))]
+
+# Create the DataFrame
+
+dist = pd.DataFrame(rows, columns=headers)
+
+# Print the DataFrame
+
+print(dist)
+
+csv_file_path = r'C:\Users\alex_\OneDrive\PGA Predictor\Python\dist.csv'
+dist.to_csv(csv_file_path, index=False, encoding='utf-8-sig')
+
+#os.startfile(csv_file_path)
+
+
+
+
+
+
+
+
+
+#ACCURACY
+
+
+# Open the webpage
+
+driver.get('https://www.pgatour.com/stats/detail/102')
+
+# Find the div using the CSS selector
+
+css_selector = '#__next > div.css-1hs4aw1 > div > div.css-i5hv4r > main > div > div:nth-child(9) > div.css-0'
+div = driver.find_element(By.CSS_SELECTOR,css_selector)
+
+# Gather div_text
+
+div_text=div.text
+
+# Regular expression to remove 'Tour Average' and the following numeric value
+
+# This pattern captures 'Tour Average' and any numeric values that follow, including optional newlines
+pattern = re.compile(r'Tour Average\s+[\d.,]+\s*%?\n?')
+
+# Apply regex substitution to remove 'Tour Average' and the numeric value
+
+cleaned_text = pattern.sub('', div_text).strip()  # .strip() to remove any leading/trailing whitespace
+
+# Print the cleaned text
+
+print(cleaned_text.splitlines()[:10])
+
+# Define keywords to remove (can be adjusted based on needs)
+
+keywords_to_remove = [
+    'All Players', 'RANK', 'PLAYER',
+    'FAIRWAYS HIT', 'POSSIBLE FAIRWAYS'
+]
+
+# Function to remove specific keywords
+
+def clean_text(text, keywords):
+    lines = text.splitlines()  # Split the text into lines
+    cleaned_lines = [
+        line for line in lines
+        if not any(keyword in line for keyword in keywords)  # Filter out lines with keywords
+    ]
+    cleaned_text = "\n".join(cleaned_lines)  # Join the cleaned lines into a single string
+    return cleaned_text  # Return the cleaned text
+
+# Clean the text by removing lines containing specific keywords
+
+cleaned_text = clean_text(cleaned_text, keywords_to_remove)
+
+# Remove only the first occurrence of %
+
+cleaned_text = re.sub(r'%\s*', '', cleaned_text, 1)
+
+# Print the cleaned text
+
+print(cleaned_text.splitlines()[:10])
+
+# Define the updated headers (removing 'All Players')
+
+headers = ['Rank', 'Change', 'Player', '%', 'Fairways Hit', 'Possible Fairways']
+
+# Function to handle multi-word entries correctly
+
+def extract_values_from_line(line):
+# Split line by a predefined number of spaces or other delimiter
+# Assuming space-separated values, we use regex to split on multiple spaces and handle quotes for multi-word entries
+    return re.split(r'\s{2,}', line.strip())  # Split on 2 or more spaces
+
+# Split the cleaned text into individual values
+
+values = [cleaned_text]
+for line in cleaned_text.splitlines():
+    values.extend(extract_values_from_line(line))
+
+# Create rows from values
+
+rows = [values[i:i + len(headers)] for i in range(1, len(values), len(headers))]
+
+# Create the DataFrame
+
+acc = pd.DataFrame(rows, columns=headers)
+
+# Print the DataFrame
+
+print(acc)
+
+csv_file_path = r'C:\Users\alex_\OneDrive\PGA Predictor\Python\acc.csv'
+acc.to_csv(csv_file_path, index=False, encoding='utf-8-sig')
+
+#os.startfile(csv_file_path)
+
+
+
+
+
+
+
+
+
+#APPROACH
+
+
+# Open the webpage
+
+driver.get('https://www.pgatour.com/stats/detail/02568')
+
+# Find the div using the CSS selector
+
+css_selector = '#__next > div.css-1hs4aw1 > div > div.css-i5hv4r > main > div > div:nth-child(9) > div.css-0'
+div = driver.find_element(By.CSS_SELECTOR,css_selector)
+
+# Gather div_text
+
+div_text=div.text
+
+# Regular expression to remove 'Tour Average' and the following numeric value
+
+# This pattern captures 'Tour Average' and any numeric values that follow, including optional newlines
+
+pattern = re.compile(r'Tour Average\s+[\d.,]+\s*%?\n?')
+
+# Apply regex substitution to remove 'Tour Average' and the numeric value
+
+cleaned_text = pattern.sub('', div_text).strip()  # .strip() to remove any leading/trailing whitespace
+
+# Print the cleaned text
+
+print(cleaned_text.splitlines()[:10])
+
+# Define keywords to remove (can be adjusted based on needs)
+
+keywords_to_remove = [
+    'All Players', 'RANK', 'PLAYER',
+    'AVG', 'TOTAL SG:APP', 'MEASURED ROUNDS'
+]
+
+# Function to remove specific keywords
+
+def clean_text(text, keywords):
+    lines = text.splitlines()  # Split the text into lines
+    cleaned_lines = [
+        line for line in lines
+        if not any(keyword in line for keyword in keywords)  # Filter out lines with keywords
+    ]
+    cleaned_text = "\n".join(cleaned_lines)  # Join the cleaned lines into a single string
+    return cleaned_text  # Return the cleaned text
+
+# Clean the text by removing lines containing specific keywords
+
+cleaned_text = clean_text(cleaned_text, keywords_to_remove)
+
+# Print the cleaned text
+
+print(cleaned_text.splitlines()[:10])
+
+# Define the updated headers (removing 'All Players')
+
+headers = ['Rank', 'Change', 'Player', 'Avg', 'Total SG:APP', 'Measured Rounds']
+
+# Function to handle multi-word entries correctly
+
+def extract_values_from_line(line):
+# Split line by a predefined number of spaces or other delimiter
+# Assuming space-separated values, we use regex to split on multiple spaces and handle quotes for multi-word entries
+    return re.split(r'\s{2,}', line.strip())  # Split on 2 or more spaces
+
+# Split the cleaned text into individual values
+
+values = [cleaned_text]
+for line in cleaned_text.splitlines():
+    values.extend(extract_values_from_line(line))
+
+# Create rows from values
+
+rows = [values[i:i + len(headers)] for i in range(1, len(values), len(headers))]
+
+# Create the DataFrame
+
+app = pd.DataFrame(rows, columns=headers)
+
+# Print the DataFrame
+
+print(app)
+
+csv_file_path = r'C:\Users\alex_\OneDrive\PGA Predictor\Python\app.csv'
+app.to_csv(csv_file_path, index=False, encoding='utf-8-sig')
+
+#os.startfile(csv_file_path)
+
+
+
+
+
+
+
+
+
+#ARG
+
+
+# Open the webpage
+
+driver.get('https://www.pgatour.com/stats/detail/02569')
+
+# Find the div using the CSS selector
+
+css_selector = '#__next > div.css-1hs4aw1 > div > div.css-i5hv4r > main > div > div:nth-child(9) > div.css-0'
+div = driver.find_element(By.CSS_SELECTOR,css_selector)
+
+# Gather div_text
+
+div_text=div.text
+
+# Regular expression to remove 'Tour Average' and the following numeric value
+
+# This pattern captures 'Tour Average' and any numeric values that follow, including optional newlines
+pattern = re.compile(r'Tour Average\s+[\d.,]+\s*%?\n?')
+
+# Apply regex substitution to remove 'Tour Average' and the numeric value
+
+cleaned_text = pattern.sub('', div_text).strip()  # .strip() to remove any leading/trailing whitespace
+
+# Print the cleaned text
+
+print(cleaned_text.splitlines()[:10])
+
+# Define keywords to remove (can be adjusted based on needs)
+
+keywords_to_remove = [
+    'All Players', 'RANK', 'PLAYER',
+    'AVG', 'TOTAL SG:ARG', 'MEASURED ROUNDS'
+]
+
+# Function to remove specific keywords
+
+def clean_text(text, keywords):
+    lines = text.splitlines()  # Split the text into lines
+    cleaned_lines = [
+        line for line in lines
+        if not any(keyword in line for keyword in keywords)  # Filter out lines with keywords
+    ]
+    cleaned_text = "\n".join(cleaned_lines)  # Join the cleaned lines into a single string
+    return cleaned_text  # Return the cleaned text
+
+# Clean the text by removing lines containing specific keywords
+
+cleaned_text = clean_text(cleaned_text, keywords_to_remove)
+
+# Print the cleaned text
+
+print(cleaned_text.splitlines()[:10])
+
+# Define the updated headers (removing 'All Players')
+
+headers = ['Rank', 'Change', 'Player', 'Avg', 'Total SG:ARG', 'Measured Rounds']
+
+# Function to handle multi-word entries correctly
+
+def extract_values_from_line(line):
+
+# Split line by a predefined number of spaces or other delimiter
+
+# Assuming space-separated values, we use regex to split on multiple spaces and handle quotes for multi-word entries
+    return re.split(r'\s{2,}', line.strip())  # Split on 2 or more spaces
+
+# Split the cleaned text into individual values
+
+values = [cleaned_text]
+for line in cleaned_text.splitlines():
+    values.extend(extract_values_from_line(line))
+
+# Create rows from values
+
+rows = [values[i:i + len(headers)] for i in range(1, len(values), len(headers))]
+
+# Create the DataFrame
+
+arg = pd.DataFrame(rows, columns=headers)
+
+# Print the DataFrame
+
+print(arg)
+
+csv_file_path = r'C:\Users\alex_\OneDrive\PGA Predictor\Python\arg.csv'
+arg.to_csv(csv_file_path, index=False, encoding='utf-8-sig')
+
+#os.startfile(csv_file_path)
+
+
+
+
+
+
+
+
+
+#PUTT
+
+
+# Open the webpage
+
+driver.get('https://www.pgatour.com/stats/detail/02564')
+
+# Find the div using the CSS selector
+
+css_selector = '#__next > div.css-1hs4aw1 > div > div.css-i5hv4r > main > div > div:nth-child(9) > div.css-0'
+div = driver.find_element(By.CSS_SELECTOR,css_selector)
+
+# Gather div_text
+
+div_text=div.text
+
+# Regular expression to remove 'Tour Average' and the following numeric value
+
+# This pattern captures 'Tour Average' and any numeric values that follow, including optional newlines
+
+pattern = re.compile(r'Tour Average\s+[\d.,]+\s*%?\n?')
+
+# Apply regex substitution to remove 'Tour Average' and the numeric value
+
+cleaned_text = pattern.sub('', div_text).strip()  # .strip() to remove any leading/trailing whitespace
+
+# Print the cleaned text
+
+print(cleaned_text.splitlines()[:10])
+
+# Define keywords to remove (can be adjusted based on needs)
+
+keywords_to_remove = [
+    'All Players', 'RANK', 'PLAYER',
+    'AVG', 'TOTAL SG:PUTTING', 'MEASURED ROUNDS'
+]
+
+# Function to remove specific keywords
+
+def clean_text(text, keywords):
+    lines = text.splitlines()  # Split the text into lines
+    cleaned_lines = [
+        line for line in lines
+        if not any(keyword in line for keyword in keywords)  # Filter out lines with keywords
+    ]
+    cleaned_text = "\n".join(cleaned_lines)  # Join the cleaned lines into a single string
+    return cleaned_text  # Return the cleaned text
+
+# Clean the text by removing lines containing specific keywords
+
+cleaned_text = clean_text(cleaned_text, keywords_to_remove)
+
+# Print the cleaned text
+
+print(cleaned_text.splitlines()[:10])
+
+# Define the updated headers (removing 'All Players')
+
+headers = ['Rank', 'Change', 'Player', 'Avg', 'Total SG:PUTT', 'Measured Rounds']
+
+# Function to handle multi-word entries correctly
+
+def extract_values_from_line(line):
+
+# Split line by a predefined number of spaces or other delimiter
+
+# Assuming space-separated values, we use regex to split on multiple spaces and handle quotes for multi-word entries
+    return re.split(r'\s{2,}', line.strip())  # Split on 2 or more spaces
+
+# Split the cleaned text into individual values
+
+values = [cleaned_text]
+for line in cleaned_text.splitlines():
+    values.extend(extract_values_from_line(line))
+
+# Create rows from values
+
+rows = [values[i:i + len(headers)] for i in range(1, len(values), len(headers))]
+
+# Create the DataFrame
+
+putt = pd.DataFrame(rows, columns=headers)
+
+# Print the DataFrame
+
+print(putt)
+
+csv_file_path = r'C:\Users\alex_\OneDrive\PGA Predictor\Python\putt.csv'
+putt.to_csv(csv_file_path, index=False, encoding='utf-8-sig')
+
+#os.startfile(csv_file_path)
+
+
+
+
+
+
+
+
+
+#SG
+
+
+# Open the webpage
+
+driver.get('https://www.pgatour.com/stats/detail/02675')
+
+# Find the div using the CSS selector
+
+css_selector = '#__next > div.css-1hs4aw1 > div > div.css-i5hv4r > main > div > div:nth-child(9) > div.css-0'
+div = driver.find_element(By.CSS_SELECTOR,css_selector)
+
+# Gather div_text
+
+div_text=div.text
+
+# Regular expression to remove 'Tour Average' and the following numeric value
+
+# This pattern captures 'Tour Average' and any numeric values that follow, including optional newlines
+
+pattern = re.compile(r'Tour Average\s+[\d.,]+\s*%?\n?')
+
+# Apply regex substitution to remove 'Tour Average' and the numeric value
+
+cleaned_text = pattern.sub('', div_text).strip()  # .strip() to remove any leading/trailing whitespace
+
+# Print the cleaned text
+
+print(cleaned_text.splitlines()[:10])
+
+# Define keywords to remove (can be adjusted based on needs)
+
+keywords_to_remove = [
+    'All Players', 'RANK', 'PLAYER',
+    'AVG', 'TOTAL SG:T', 'TOTAL SG:T2G', 'TOTAL SG:P', 'MEASURED ROUNDS'
+]
+
+# Function to remove specific keywords
+
+def clean_text(text, keywords):
+    lines = text.splitlines()  # Split the text into lines
+    cleaned_lines = [
+        line for line in lines
+        if not any(keyword in line for keyword in keywords)  # Filter out lines with keywords
+    ]
+    cleaned_text = "\n".join(cleaned_lines)  # Join the cleaned lines into a single string
+    return cleaned_text  # Return the cleaned text
+
+# Clean the text by removing lines containing specific keywords
+
+cleaned_text = clean_text(cleaned_text, keywords_to_remove)
+
+# Print the cleaned text
+
+print(cleaned_text.splitlines()[:10])
+
+# Define the updated headers (removing 'All Players')
+
+headers = ['Rank', 'Change', 'Player', 'Avg', 'Total SG:T', 'Total SG:T2G', 'Total SG:P', 'Measured Rounds']
+
+# Function to handle multi-word entries correctly
+
+def extract_values_from_line(line):
+
+# Split line by a predefined number of spaces or other delimiter
+
+# Assuming space-separated values, we use regex to split on multiple spaces and handle quotes for multi-word entries
+    return re.split(r'\s{2,}', line.strip())  # Split on 2 or more spaces
+
+# Split the cleaned text into individual values
+
+values = [cleaned_text]
+for line in cleaned_text.splitlines():
+    values.extend(extract_values_from_line(line))
+
+# Create rows from values
+
+rows = [values[i:i + len(headers)] for i in range(1, len(values), len(headers))]
+
+# Create the DataFrame
+
+sg = pd.DataFrame(rows, columns=headers)
+
+# Print the DataFrame
+
+print(sg)
+
+csv_file_path = r'C:\Users\alex_\OneDrive\PGA Predictor\Python\sg.csv'
+sg.to_csv(csv_file_path, index=False, encoding='utf-8-sig')
+
+#os.startfile(csv_file_path)
+
+# endregion
+
+
+
+
+
+
+
+#Merge
+
+
+import pandas as pd
+
+# Merge DataFrames while keeping 'Player' and all 'Avg' columns
+pga_raw_data = (
+    pd.merge(dist[['Player', 'Avg']], acc[['Player', '%']], on='Player', how='inner', suffixes=('_dist', '_acc'))
+    .merge(app[['Player', 'Avg']], on='Player', how='inner', suffixes=('', '_app'))
+    .merge(arg[['Player', 'Avg']], on='Player', how='inner', suffixes=('', '_arg'))
+    .merge(putt[['Player', 'Avg']], on='Player', how='inner', suffixes=('', '_putt'))
+    .merge(sg[['Player', 'Avg']], on='Player', how='inner', suffixes=('', '_sg'))
+)
+
+print(pga_raw_data)
+
+
+# Remove '%' symbol and convert to numeric
+if '%' in pga_raw_data.columns:
+    pga_raw_data['%'] = pga_raw_data['%'].str.replace('%', '', regex=False).astype(float)
+
+# Convert object columns to numeric where possible, excluding 'Player'
+for col in pga_raw_data.columns:
+    if col != 'Player' and pga_raw_data[col].dtype == 'object':
+        try:
+            pga_raw_data[col] = pd.to_numeric(pga_raw_data[col], errors='coerce')
+        except ValueError:
+            # Columns that cannot be converted to numeric will be left as is
+            pass
+
+# Now, numeric columns can be scaled
+numeric_columns = pga_raw_data.select_dtypes(include=['float64', 'int64']).columns.difference(['Player'])
+
+def min_max_scaling(series):
+    min_val = series.min()
+    max_val = series.max()
+    if max_val != min_val:
+        return (series - min_val) / (max_val - min_val)
+    else:
+        return series  # Return the original series if all values are the same
+
+# Apply min-max scaling to numeric columns
+pga_raw_data[numeric_columns] = pga_raw_data[numeric_columns].apply(min_max_scaling)
+
+print(pga_raw_data)
+
+# Add columns
+pga_raw_data['dg'] = pd.NA
+pga_raw_data['radar'] = pd.NA
+pga_raw_data['bdg'] = pd.NA
+pga_raw_data['bradar'] = pd.NA
+pga_raw_data['dgcr'] = pd.NA
+pga_raw_data['radarcr'] = pd.NA
+pga_raw_data['bdgcr'] = pd.NA
+pga_raw_data['bradarcr'] = pd.NA
+pga_raw_data['win'] = pd.NA
+pga_raw_data['t10'] = pd.NA
+pga_raw_data['sgt5'] = pd.NA
+
+pga=pga_raw_data.copy()
+
+# Rename columns
+pga=pga_raw_data.rename(columns = {'Avg':'dist', '%':'acc', 'Avg_app':'app', 
+'Avg_arg':'arg', 'Avg_putt':'putt', 'Avg_sg':'sg'})
+
+pga
+
+# Assuming pga is your DataFrame with the specified columns
+pga['dg'] = (pga['dist'] * dist_dg + 
+             pga['acc'] * acc_dg + 
+             pga['app'] * app_dg + 
+             pga['arg'] * arg_dg + 
+             pga['putt'] * putt_dg)
+
+pga['radar'] = (pga['dist'] * dist_rdr + 
+             pga['acc'] * acc_rdr + 
+             pga['app'] * app_rdr + 
+             pga['arg'] * arg_rdr + 
+             pga['putt'] * putt_rdr + 
+             pga['sg'] * sg_rdr)
+
+# Display the updated DataFrame
+pga=pga.round(2)
+pga_dg = pga.sort_values(by='dg', ascending=False).reset_index(drop=True)
+pga_rdr = pga.sort_values(by='radar', ascending=False).reset_index(drop=True)
+
+
+
+
+
+
+
+
+
+#Introduce this weeks field
+
+
+# Open the webpage
+driver.get('https://www.pgatour.com/leaderboard')
+
+# Find the div using the CSS selector
+css_selector = r'#tabs-\:Rt6lclf6\:--tabpanel-0 > div.css-0'
+div = driver.find_element(By.CSS_SELECTOR,css_selector)
+
+# Gather div_text
+div_text=div.text
+
+# Split the div_text into lines and filter for player names, excluding time values
+lines = div_text.split('\n')
+player_names = [
+    line for line in lines 
+    if ' ' in line and not line.startswith(('POS', 'PLAYER', 'TOTAL', 'THRU', 'ROUND', 'R1', 'R2', 'R3', 'R4', 'ODDS TO WIN', '-', 'AM', 'PM')) 
+    and not any(char.isdigit() for char in line)  # Exclude lines with numbers (e.g., time values)
+]
+
+# Create DataFrame
+field = pd.DataFrame(player_names, columns=['Player'])
+
+# Display the DataFrame
+field
+
+# Assuming you already have field and pga_dg DataFrames
+
+# Create pga_model by filtering pga_dg based on Player names in field
+pga_model = pga_dg[pga_dg['Player'].isin(field['Player'])].reset_index(drop=True)
+
+# Add 2023 backtest data
+file_path = r'C:\Users\alex_\OneDrive\PGA Predictor\Python\2024.csv'
+backtest_2024 = pd.read_csv(file_path)
+backtest_2024.columns = [
+    'Player', 'dist', 'acc', 'app', 'arg', 'putt', 'sg', 'dg', 'radar', 
+    'dgcr', 'radarcr'
+]
+backtest_2024 = backtest_2024.sort_values(by='dg', ascending=False).reset_index(drop=True)
+
+# Add BDG and BRADAR to pga_model
+# Create backtest coefficient
+coeff_2024 = corr_to_last_season*((total_events - completed_events)/(total_events))
+coeff_2025 = 1 - coeff_2024
+
+# Collect 2023 data dictionary for each player
+backtest_2024_dg = backtest_2024.set_index('Player')['dg'].to_dict()
+backtest_2024_radar = backtest_2024.set_index('Player')['radar'].to_dict()
+
+# Using pga_model[dg] * coefficient 1 + pga_model[radar] + coefficient 2
+pga_model['bdg'] = (coeff_2024 * pga_model['Player'].map(backtest_2024_dg)) + (coeff_2025 * pga_model['dg'])
+pga_model['bradar'] = (coeff_2024 * pga_model['Player'].map(backtest_2024_radar)) + (coeff_2025 * pga_model['radar'])
+
+# Fill NaN values in bdg and bradar with corresponding dg and radar values
+pga_model['bdg'].fillna(pga_model['dg'], inplace=True)
+pga_model['bradar'].fillna(pga_model['radar'], inplace=True)
+
+# Round bdg and bradar to 2dp
+pga_model['bdg'] = pga_model['bdg'].round(2)
+pga_model['bradar'] = pga_model['bradar'].round(2)
+
+# Rank the values in the dgcr, radarcr, bdgcr, bradarcr columns
+pga_model['dgcr'] = pga_model['dg'].rank(method='min', ascending=False).astype(int)
+pga_model['radarcr'] = pga_model['radar'].rank(method='min', ascending=False).astype(int)
+pga_model['bdgcr'] = pga_model['bdg'].rank(method='min', ascending=False).astype(int)
+pga_model['bradarcr'] = pga_model['bradar'].rank(method='min', ascending=False).astype(int)
+
+# Display the resulting pga_model DataFrame
+pga_model
+
+# Find selections
+selections = pga_model.query('dgcr <= 3 or radarcr <= 3 or bdgcr <= 3 or bradarcr <= 3')
+
+# Display the styled DataFrame
+selections
+
+# Calculate the total sum of 'bdg' in the selections DataFrame
+total_bdg_sum = selections['bdg'].sum()
+
+# Create the stakes DataFrame with 'Player' and 'Stake' columns
+stakes = selections[['Player']].copy()  # Copy 'Player' column from selections
+stakes['Stake'] = (selections['bdg']/total_bdg_sum) * 25  # Calculate Stake
+
+# Convert to GBP format
+stakes['Stake'] = stakes['Stake'].apply(lambda x: f"£{x:.2f}")
+
+# Display the stakes DataFrame
+stakes
+
+total_stake = stakes['Stake'].sum()
+
+
+
+
+
+
+
+
+
+# Custom selection
+
+# Find selections
+selections = pga_model.query('dgcr <= 3 or radarcr <= 3 or bdgcr <= 3 or bradarcr <= 3')
+selections = selections[~selections['Player'].str.contains('Rory McIlroy', case=False, na=False)]
+selections
+
+# Calculate the total sum of 'bdg' in the selections DataFrame
+total_bdg_sum = selections['bdg'].sum()
+
+# Create the stakes DataFrame with 'Player' and 'Stake' columns
+stakes = selections[['Player', 'bdg']].copy()  # Copy 'Player' column from selections
+stakes.loc[0, 'Odds'] = 12.5
+stakes.loc[1, 'Odds'] = 5.8
+stakes.loc[3, 'Odds'] = 50
+stakes['Stake 1-3'] = (stakes['bdg']/stakes['bdg'].sum()) * 25  # Calculate Stake
+stakes['Stake Value'] = (stakes['bdg']/stakes['bdg'].sum()) * (stakes['Odds']/stakes['Odds'].sum()) # Calculate Stake
+scaling_factor = 25 / stakes['Stake Value'].sum() # Change total stake
+stakes['Stake Value'] = stakes['Stake Value'] * scaling_factor
+
+# Calculate Stake 1-3 Profit
+stakes["Stake 1-3 Profit"] = stakes.apply(
+    lambda row: (row["Odds"] - 1) * row["Stake 1-3"] - (stakes["Stake 1-3"].sum() - row["Stake 1-3"]),
+    axis=1
+)
+
+# Calculate Stake Value Profit
+stakes["Stake Value Profit"] = stakes.apply(
+    lambda row: (row["Odds"] - 1) * row["Stake Value"] - (stakes["Stake Value"].sum() - row["Stake Value"]),
+    axis=1
+)
+
+# Convert to GBP format
+stakes['Stake 1-3'] = stakes['Stake 1-3'].apply(lambda x: f"£{x:.2f}")
+stakes['Stake Value'] = stakes['Stake Value'].apply(lambda x: f"£{x:.2f}")
+stakes['Stake 1-3 Profit'] = stakes['Stake 1-3 Profit'].apply(lambda x: f"£{x:.2f}")
+stakes['Stake Value Profit'] = stakes['Stake Value Profit'].apply(lambda x: f"£{x:.2f}")
+
+# Find total stakes
+total_stake_1to3_formatted = stakes['Stake 1-3'].replace({'£': ''}, regex=True).astype(float).sum()
+total_stake_1to3 = f"£{total_stake_1to3_formatted:.2f}"
+
+total_stake_value_formatted = stakes['Stake Value'].replace({'£': ''}, regex=True).astype(float).sum()
+total_stake_value = f"£{total_stake_value_formatted:.2f}"
+
+driver.quit()
+
+print("Query run")
